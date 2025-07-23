@@ -1,6 +1,12 @@
 import torch
 from pydub import AudioSegment
 import numpy as np
+import sys
+import os
+
+# Add the TTS-team repo to the path to import KeceTTS
+# sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
+
 
 class Qwen2_5OmniClient:
     def __init__(self, model_name, accelerator, voice_to_use):
@@ -240,4 +246,75 @@ class OrpheusClient:
         return pydub_segment, None
     
     def prepare_emergent_tts_sample(self, text_to_synthesize, category, strong_prompting, prompting_object,**kwargs):
+        return None, text_to_synthesize
+
+
+class KeceTTSClient:
+    def __init__(self, model_name, accelerator, voice_to_use):
+        from evals.inference_APIs.KeceTTS import KeceTTSModelConfig
+
+        # Create KeceTTS model config and instantiate the API
+        self.config = KeceTTSModelConfig()
+        # Set device from accelerator
+        self.config.device = accelerator.device
+        
+        # If model_name is provided as a path, set it as the model path
+        if model_name and model_name != "KeceTTS":
+            self.config.tts_model_path = model_name
+            
+        self.model = self.config.instantiate()
+        self.sampling_rate = self.model.sample_rate
+        self.voice_to_use = voice_to_use  # KeceTTS uses reference audio, so this could be a reference audio path
+        
+    def set_eval_mode(self):
+        # KeceTTS doesn't have explicit eval mode, but we can ensure the model is in eval mode
+        if hasattr(self.model.inference_model, 'model'):
+            self.model.inference_model.model.eval()
+
+    def generate_audio_out(self, system_message, user_message, accelerator, **GENERATION_CONFIG):
+        # KeceTTS needs reference audio for TTS. For EmergentTTS eval, we'll use a default reference
+        # or use the voice_to_use parameter as a reference audio path if provided
+        
+        # Default reference audio path - using an existing audio file from evals
+        default_ref_path = "/home/zlatka/cantina/repos/TTS-team/evals/performance/results/audio/000_viktor_eka.wav"
+        ref_path = self.voice_to_use if self.voice_to_use else default_ref_path
+        
+        try:
+            # Use run_tts method from KeceTTS API
+            audio_tensor = self.model.run_tts(
+                text=user_message,
+                ref_path=ref_path
+            )
+            
+            # Convert tensor to numpy
+            audio_np = audio_tensor.cpu().numpy()
+            
+            # Normalize to 16-bit PCM format
+            audio_np = np.int16(audio_np * 32767)
+            
+            # Create an audio segment
+            pydub_segment = AudioSegment(
+                audio_np.tobytes(),
+                frame_rate=self.sampling_rate,
+                sample_width=2,  # 16-bit audio
+                channels=1
+            )
+            
+            return pydub_segment, None
+            
+        except Exception as e:
+            print(f"Error in KeceTTS generation: {e}")
+            # Return empty audio segment in case of error
+            empty_audio = np.zeros(int(self.sampling_rate * 0.5), dtype=np.int16)
+            pydub_segment = AudioSegment(
+                empty_audio.tobytes(),
+                frame_rate=self.sampling_rate,
+                sample_width=2,
+                channels=1
+            )
+            return pydub_segment, None
+
+    def prepare_emergent_tts_sample(self, text_to_synthesize, category, strong_prompting, prompting_object, **kwargs):
+        # KeceTTS doesn't use system/user message structure like conversational models
+        # It just needs the text to synthesize, so we return None for system message
         return None, text_to_synthesize

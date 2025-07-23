@@ -4,7 +4,8 @@ from accelerate import Accelerator
 from model_clients import (
     Qwen2_5OmniClient,
     Sesame1BClient,
-    OrpheusClient
+    OrpheusClient,
+    KeceTTSClient
 )
 from api_clients import (
     OpenAIClient,
@@ -128,6 +129,12 @@ if __name__ == "__main__":
         kwargs_handlers = [InitProcessGroupKwargs(timeout=timedelta(seconds=3600000))]
         accelerator = Accelerator(kwargs_handlers=kwargs_handlers)
         model_client = Sesame1BClient(args.model_name_or_path, accelerator)
+        evaluate_package = evaluate_with_accelerate
+    elif args.model_name_or_path == "KeceTTS" or "KeceTTS" in args.model_name_or_path:
+        print(f"Evaluating KeceTTS model")
+        kwargs_handlers = [InitProcessGroupKwargs(timeout=timedelta(seconds=3600000))]
+        accelerator = Accelerator(kwargs_handlers=kwargs_handlers)
+        model_client = KeceTTSClient(args.model_name_or_path, accelerator, args.voice_to_use)
         evaluate_package = evaluate_with_accelerate
     else:
         print("Evaluating closed source model through api client")
