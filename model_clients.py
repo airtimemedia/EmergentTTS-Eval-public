@@ -287,6 +287,7 @@ class KeceTTSClient:
             )
             
             # Convert tensor to numpy
+            audio_tensor = torch.clamp(audio_tensor, -1.0, 1.0)
             audio_np = audio_tensor.cpu().numpy()
             
             # Normalize to 16-bit PCM format
